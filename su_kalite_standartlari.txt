@@ -1,0 +1,38 @@
+Parametre,TSE,EC,WHO
+Mikrobiyolojik EMS/100 mL,0,0,0
+Koliform,0,0,0
+Esherichia Coli (E.Coli),0,0,0
+Toplam Koloni Sayısı (22C'),500,500,500
+Toplam Koloni Sayısı (37C'),100,100,100
+pH,6.5 - 9.5,6.5 - 9.5,6.5 - 8.5
+İletkenlik 20' (uS/cm),2500,2500,NA
+Nitrat (NO3),50,50,50
+Nitrit (NO2),0.5,0.5,0.1
+Bor (B),1,1,0.5
+Nikel (Ni),0.02,0.02,0.07
+Arsenik (As),0.01,0.01,0.01
+Kadminyum (Cd),0.005,0.005,0.003
+Civa,0.001,0.001,0.006
+Krom Toplam (Cr),0.05,0.05,0.05
+Baryum,1,1,0.7
+Florür (F),1.5,1.5,1.5
+Kurşun (Pb),0.01,0.01,0.01
+Bromat (Br),0.01,0.01,0.01
+Benzen (C6H6),0.01,0.01,0.01
+Bakır (Cu),2,2,2
+Fosfor,,,
+Demir (Fe),0.3,0.3,0.3
+Çinko,3,3,3
+Mangan (Mn),0.4,0.4,0.4
+Magnezyum (Mg),150,150,150
+Alüminyum (Al),0.2,0.2,0.2
+Amonyum (NH4),0.5,0.5,0.5
+Sodyum (Na),200,200,200
+Potasyum (K),10,10,10
+Serbest Klor (CI2),4,4,5
+Klorür (Cl),250,250,250
+Kalsiyum (Ca),100,100,100
+Sülfat (SO4),250,250,250
+Sertlik (CaCO3),500,500,500
+Renk (Co-Pt birimi),15,15,15
+Bulanıklık (NTU birimi),5.0,4.0,5.0
