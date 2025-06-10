@@ -1,4 +1,4 @@
-﻿altair==5.5.0
+altair==5.5.0
 attrs==25.3.0
 blinker==1.9.0
 cachetools==5.5.2
@@ -27,6 +27,7 @@ pytz==2025.2
 referencing==0.36.2
 requests==2.32.3
 rpds-py==0.25.1
+scikit-learn==1.5.2
 six==1.17.0
 smmap==5.0.2
 streamlit==1.45.1
