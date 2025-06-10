@@ -303,7 +303,7 @@ if st.button("💡 Hesapla"):
         st.markdown("---")
         st.success("Rapor hazır! PDF formatında indirebilirsin.")
         
-        pdf_file = generate_pdf(df_tse, df_ec, df_who, rf_prediction, ann_prediction, feature_importance)
+        pdf_file = generate_pdf(df_tse, ec_df, who_df, rf_prediction, ann_prediction, feature_importance)
         st.download_button("📥 PDF Raporu İndir", data=pdf_file,
                            file_name="su_kalite_raporu.pdf",
                            mime="application/pdf")
