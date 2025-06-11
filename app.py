@@ -233,4 +233,57 @@ def create_comparison_chart(df_limits, input_values):
         buf.seek(0)
         return buf, None
     except Exception as e:
-        return None, f"Grafik oluşturulurken hata: {str(e)}
+        return None, f"Grafik oluşturulurken hata: {str(e)}"
+
+st.title("💧 İçme Suyu Kalite Testi")
+st.caption("📌 Lütfen sadece sayısal değer giriniz. Boş bırakabilirsiniz.")
+
+df_limits = fetch_limits()
+input_values = {}
+
+cols = st.columns(4)
+for idx, row in df_limits.iterrows():
+    param = row["Parametre"]
+    with cols[idx % 4]:
+        input_values[param] = st.number_input(param, format="%.4f", key=param)
+
+if st.button("💡 Hesapla"):
+    df_tse = create_results(df_limits, "TSE", input_values)
+    df_ec = create_results(df_limits, "EC", input_values)
+    df_who = create_results(df_limits, "WHO", input_values)
+    
+    # AI Analysis
+    ai_df, quality_score, rf_error = random_forest_prediction(input_values, df_limits)
+    ai_comment = generate_ai_comment(df_tse) if not rf_error else "AI yorumu oluşturulamadı."
+    chart_buf, chart_error = create_comparison_chart(df_limits, input_values)
+
+    tabs = st.tabs(["📘 TSE", "📗 EC", "📕 WHO", "🤖 AI"])
+    with tabs[0]:
+        st.subheader("TSE Sonuçları")
+        st.dataframe(df_tse.style.map(color_code, subset=["Durum"]))
+    with tabs[1]:
+        st.subheader("EC Sonuçları")
+        st.dataframe(df_ec.style.map(color_code, subset=["Durum"]))
+    with tabs[2]:
+        st.subheader("WHO Sonuçları")
+        st.dataframe(df_who.style.map(color_code, subset=["Durum"]))
+    with tabs[3]:
+        st.subheader("AI Analizi ve Tahmin")
+        if rf_error:
+            st.error(rf_error)
+        else:
+            st.write(f"**Su Kalite Skoru (Random Forest Tahmini):** {quality_score:.2f}/100")
+            st.write(f"**AI Yorumu:** {ai_comment}")
+            st.dataframe(ai_df.style.map(color_code, subset=["Durum"]))
+        if chart_error:
+            st.error(chart_error)
+        elif chart_buf:
+            st.image(chart_buf, caption="Kullanıcı Değerleri vs TSE Üst Sınırları (İlk 5 Parametre)")
+
+    st.markdown("---")
+    st.success("Rapor hazır! PDF formatında indirebilirsin.")
+
+    pdf_file = generate_pdf(df_tse, df_ec, df_who, ai_df if not rf_error else None)
+    st.download_button("📥 PDF Raporu İndir", data=pdf_file,
+                       file_name="su_kalite_raporu.pdf",
+                       mime="application/pdf")
