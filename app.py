@@ -40,7 +40,8 @@ def fetch_limits():
                          "EMS/100", "Organoleptik", "Renk", "Bulanıklık", "Koku", "Tat",
                          "Siyanür (CN)", "Selenyum (Se)", "Antimon (Sb)",
                          "C.perfringers", "Pseudomonas Aeruginosa"]
-        mask = ~df["Parametre"].str.contains("|".join(drop_keywords), na=False)
+        # Use regex=False to avoid UserWarning about match groups
+        mask = ~df["Parametre"].str.contains("|".join(drop_keywords), na=False, regex=False)
         df = df[mask].reset_index(drop=True)
         return df
     except Exception as e:
@@ -175,7 +176,7 @@ def random_forest_prediction(input_values, df_limits):
             score = 100
             for val, tse_range in zip(sample, df_limits["TSE"]):
                 low, high = parse_range(tse_range)
-                if low is not None and high is not None:
+                if low is None or high is not None:
                     if val < low or val > high:
                         score -= 20
                     elif (val - low) < 0.1 * (high - low) or (high - val) < 0.1 * (high - low):
@@ -283,7 +284,7 @@ if st.button("💡 Hesapla"):
     st.markdown("---")
     st.success("Rapor hazır! PDF formatında indirebilirsin.")
 
-    pdf_file = generate_pdf(df_tse, df_ec, df_who, ai_df if not rf_error else None)
+    pdf_file = generate_pdf(df_tse, df_ec, who_df, ai_df if not rf_error else None)
     st.download_button("📥 PDF Raporu İndir", data=pdf_file,
                        file_name="su_kalite_raporu.pdf",
                        mime="application/pdf")
