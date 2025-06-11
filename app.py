@@ -1,3 +1,4 @@
+```python
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -7,6 +8,11 @@ from PIL import Image
 import numpy as np
 import os
 import matplotlib.font_manager as fm
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 
 # Attempt to import scikit-learn
 try:
@@ -40,9 +46,9 @@ def fetch_limits():
                          "EMS/100", "Organoleptik", "Renk", "Bulanıklık", "Koku", "Tat",
                          "Siyanür (CN)", "Selenyum (Se)", "Antimon (Sb)",
                          "C.perfringers", "Pseudomonas Aeruginosa"]
-        # Use regex=False to avoid UserWarning about match groups
         mask = ~df["Parametre"].str.contains("|".join(drop_keywords), na=False, regex=False)
         df = df[mask].reset_index(drop=True)
+        logger.debug(f"Loaded {len(df)} parameters from {CSV_FILE}")
         return df
     except Exception as e:
         st.error(f"{CSV_FILE} okunurken hata oluştu: {str(e)}")
@@ -52,10 +58,12 @@ def parse_range(r):
     if pd.isna(r) or r == "":
         return (None, None)
     r = str(r).strip()
-    if "-" in r:
-        low, high = r.split("-")
-        return (float(low.replace(",", ".")), float(high.replace(",", ".")))
     try:
+        if "-" in r:
+            low, high = r.split("-")
+            low = float(low.replace(",", "."))
+            high = float(high.replace(",", "."))
+            return (low, high) if low <= high else (None, None)
         val = float(r.replace(",", "."))
         return (0.0, val)
     except:
@@ -65,6 +73,8 @@ def judge(value, limit_range):
     if value is None or limit_range == (None, None):
         return "Veri Yok"
     low, high = limit_range
+    if low is None or high is None:
+        return "Veri Yok"
     if low <= value <= high:
         if (value - low) < 0.05 * (high - low) or (high - value) < 0.05 * (high - low):
             return "Sınırda"
@@ -140,6 +150,8 @@ def generate_pdf(tse_df, ec_df, who_df, ai_df=None):
 
 def generate_ai_comment(tse_df):
     try:
+        if tse_df.empty:
+            return "TSE verileri boş. Analiz yapılamadı."
         non_compliant = len(tse_df[tse_df["Durum"] == "Uygun Değil"])
         borderline = len(tse_df[tse_df["Durum"] == "Sınırda"])
         if non_compliant > 0:
@@ -156,63 +168,88 @@ def random_forest_prediction(input_values, df_limits):
         return pd.DataFrame(), 0.0, "Random Forest modeli yüklü değil: scikit-learn eksik."
 
     try:
+        # Log parameters and ranges
+        logger.debug(f"Parameters: {df_limits['Parametre'].tolist()}")
+        for _, row in df_limits.iterrows():
+            logger.debug(f"Param: {row['Parametre']}, TSE Range: {row['TSE']}, Parsed: {parse_range(row['TSE'])}")
+
         # Generate synthetic training data
         np.random.seed(42)
         n_samples = 100
         X_train = []
         y_train = []
-        params = df_limits["Parametre"].tolist()
+        params = df_limits["Parametre"]
         
-        for _ in range(n_samples):
+        for i in range(n_samples):
             sample = []
-            for param, tse_range in zip(df_limits["Parametre"], df_limits["TSE"]):
+            for param, tse_range in zip(params, df_limits["TSE"]):
                 low, high = parse_range(tse_range)
                 if low is None or high is None:
                     sample.append(0)
                 else:
-                    sample.append(np.random.uniform(max(0, low * 0.5), high * 1.5))
+                    sample.append(np.random.uniform(max(0, low * 0.9), high * 1.1))  # Narrower range
             X_train.append(sample)
-            # Quality score: higher if within TSE limits, lower if outside
+            # Score: start at 100, deduct penalties
             score = 100
-            for val, tse_range in zip(sample, df_limits["TSE"]):
+            penalties = []
+            for val, param, tse_range in zip(sample, params, df_limits["TSE"]):
                 low, high = parse_range(tse_range)
-                if low is None or high is not None:
-                    if val < low or val > high:
-                        score -= 20
-                    elif (val - low) < 0.1 * (high - low) or (high - val) < 0.1 * (high - low):
-                        score -= 5
+                if low is None or high is None:
+                    continue
+                if val < low or val > high:
+                    penalties.append((param, val, "outside", -10))  # Reduced penalty
+                    score -= 10
+                elif (val - low) < 0.1 * (high - low) or (high - val) < 0.1 * (high - low):
+                    penalties.append((param, val, "borderline", -2))  # Reduced penalty
+                    score -= 2
             y_train.append(max(0, score))
-        
+            if i < 2:  # Log first two samples
+                logger.debug(f"Sample {i}: Values={sample[:5]}, Penalties={penalties[:5]}, Score={score}")
+
         X_train = np.array(X_train)
         y_train = np.array(y_train)
         
-        # Train Random Forest model
+        # Train model
         model = RandomForestRegressor(n_estimators=100, random_state=42)
         model.fit(X_train, y_train)
         
-        # Prepare input for prediction
+        # Prepare input
         input_vector = [input_values.get(param, 0) for param in params]
+        logger.debug(f"Input vector: {input_vector}")
         prediction = model.predict([input_vector])[0]
+        logger.debug(f"Predicted score: {prediction}")
         
-        # Create results DataFrame
+        # Results DataFrame
         results = []
         for param, val in zip(params, input_vector):
+            tse_range = df_limits[df_limits["Parametre"] == param]["TSE"].iloc[0]
             results.append({
                 "Parametre": param,
                 "Değer": val,
-                "Tahmini Değer": val,  # Placeholder, as RF predicts quality score
-                "Durum": judge(val, parse_range(df_limits[df_limits["Parametre"] == param]["TSE"].iloc[0]))
+                "Tahmini Değer": val,  # Placeholder
+                "Durum": judge(val, parse_range(tse_range))
             })
         return pd.DataFrame(results), prediction, None
     except Exception as e:
+        logger.error(f"Random Forest error: {str(e)}")
         return pd.DataFrame(), 0.0, f"Random Forest tahmini sırasında hata: {str(e)}"
 
 def create_comparison_chart(df_limits, input_values):
     try:
-        # Select top 5 parameters for readability
-        params = df_limits["Parametre"].tolist()[:5]
-        user_values = [input_values.get(p, 0) for p in params]
-        tse_limits = [parse_range(row["TSE"])[1] if parse_range(row["TSE"])[1] is not None else 0 for _, row in df_limits.iloc[:5].iterrows()]
+        # Select top 5 valid parameters
+        params = []
+        tse_limits = []
+        user_values = []
+        for _, row in df_limits.iloc[:5].iterrows():
+            param = row["Parametre"]
+            tse_range = parse_range(row["TSE"])
+            if tse_range[1] is not None:
+                params.append(param)
+                tse_limits.append(float(tse_range[1]))
+                user_values.append(float(input_values.get(param, 0)))
+        
+        if not params:
+            return None, "No valid parameters for chart."
         
         fig, ax = plt.subplots(figsize=(10, 6))
         bar_width = 0.35
@@ -242,13 +279,13 @@ st.caption("📌 Lütfen sadece sayısal değer giriniz. Boş bırakabilirsiniz.
 df_limits = fetch_limits()
 input_values = {}
 
-cols = st.columns(4)
+cols = st.columns(2)
 for idx, row in df_limits.iterrows():
     param = row["Parametre"]
-    with cols[idx % 4]:
+    with cols[idx % 2]:
         input_values[param] = st.number_input(param, format="%.4f", key=param)
 
-if st.button("💡 Hesapla"):
+if st.button("Generate Report"):
     df_tse = create_results(df_limits, "TSE", input_values)
     df_ec = create_results(df_limits, "EC", input_values)
     df_who = create_results(df_limits, "WHO", input_values)
@@ -258,18 +295,22 @@ if st.button("💡 Hesapla"):
     ai_comment = generate_ai_comment(df_tse) if not rf_error else "AI yorumu oluşturulamadı."
     chart_buf, chart_error = create_comparison_chart(df_limits, input_values)
 
-    tabs = st.tabs(["📘 TSE", "📗 EC", "📕 WHO", "🤖 AI"])
+    tabs = st.tabs(["📘 TSE", "📗 EC", "📕 WO", "🤖 AI"])
     with tabs[0]:
-        st.subheader("TSE Sonuçları")
+        st.subheader("TSE Results")
         st.dataframe(df_tse.style.map(color_code, subset=["Durum"]))
     with tabs[1]:
-        st.subheader("EC Sonuçları")
+        st.subheader("EC Results")
         st.dataframe(df_ec.style.map(color_code, subset=["Durum"]))
     with tabs[2]:
-        st.subheader("WHO Sonuçları")
+        st.subheader("WHO Results")
         st.dataframe(df_who.style.map(color_code, subset=["Durum"]))
     with tabs[3]:
-        st.subheader("AI Analizi ve Tahmin")
+        st.subheader("AI Analysis")
+        # Display input values for debugging
+        st.write("**Girilen Değerler:**")
+        input_summary = {k: v for k, v in input_values.items() if v != 0}
+        st.write(input_summary if input_summary else "Hiçbir değer girilmedi.")
         if rf_error:
             st.error(rf_error)
         else:
@@ -284,7 +325,8 @@ if st.button("💡 Hesapla"):
     st.markdown("---")
     st.success("Rapor hazır! PDF formatında indirebilirsin.")
 
-    pdf_file = generate_pdf(df_tse, df_ec, who_df, ai_df if not rf_error else None)
+    pdf_file = generate_pdf(df_tse, df_ec, df_who, ai_df if not rf_error else None)
     st.download_button("📥 PDF Raporu İndir", data=pdf_file,
                        file_name="su_kalite_raporu.pdf",
                        mime="application/pdf")
+```
