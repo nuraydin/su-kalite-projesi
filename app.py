@@ -1,4 +1,3 @@
-```python
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -18,40 +17,40 @@ logger = logging.getLogger(__name__)
 try:
     from sklearn.ensemble import RandomForestRegressor
 except ImportError:
-    st.error("scikit-learn kütüphanesi yüklü değil. Lütfen 'pip install scikit-learn==1.5.2' komutunu çalıştırın.")
+    st.error("scikit-learn library is not installed. Please run 'pip install scikit-learn==1.5.2'.")
     RandomForestRegressor = None
 
 # Preload Matplotlib font cache to avoid delays
 fm._load_fontmanager(try_read_cache=True)
 
-st.set_page_config(page_title="Su Kalite Testi", layout="wide")
+st.set_page_config(page_title="Water Quality Test", layout="wide")
 
-CSV_FILE = "su_kalite_standartlari.txt"
+CSV_FILE = "water_quality_standards.txt"
 LOGO_PATH = "mar_logo.png"
 
 @st.cache_data
 def fetch_limits():
     if not os.path.exists(CSV_FILE):
-        st.error(f"{CSV_FILE} dosyası bulunamadı!")
+        st.error(f"{CSV_FILE} file not found!")
         return pd.DataFrame()
     try:
         df = pd.read_csv(CSV_FILE)
-        df.rename(columns={df.columns[0]: "Parametre",
+        df.rename(columns={df.columns[0]: "Parameter",
                            df.columns[1]: "TSE",
                            df.columns[2]: "EC",
                            df.columns[3]: "WHO"}, inplace=True)
-        df = df.dropna(subset=["Parametre"]).reset_index(drop=True)
+        df = df.dropna(subset=["Parameter"]).reset_index(drop=True)
 
-        drop_keywords = ["Kabul Edilebilir", "STANDARTLAR", "Fiziksel ve Duyusal",
-                         "EMS/100", "Organoleptik", "Renk", "Bulanıklık", "Koku", "Tat",
-                         "Siyanür (CN)", "Selenyum (Se)", "Antimon (Sb)",
+        drop_keywords = ["Acceptable", "STANDARDS", "Physical and Sensory",
+                         "EMS/100", "Organoleptic", "Color", "Turbidity", "Odor", "Taste",
+                         "Cyanide (CN)", "Selenium (Se)", "Antimony (Sb)",
                          "C.perfringers", "Pseudomonas Aeruginosa"]
-        mask = ~df["Parametre"].str.contains("|".join(drop_keywords), na=False, regex=False)
+        mask = ~df["Parameter"].str.contains("|".join(drop_keywords), na=False, regex=False)
         df = df[mask].reset_index(drop=True)
         logger.debug(f"Loaded {len(df)} parameters from {CSV_FILE}")
         return df
     except Exception as e:
-        st.error(f"{CSV_FILE} okunurken hata oluştu: {str(e)}")
+        st.error(f"Error reading {CSV_FILE}: {str(e)}")
         return pd.DataFrame()
 
 def parse_range(r):
@@ -71,32 +70,32 @@ def parse_range(r):
 
 def judge(value, limit_range):
     if value is None or limit_range == (None, None):
-        return "Veri Yok"
+        return "No Data"
     low, high = limit_range
     if low is None or high is None:
-        return "Veri Yok"
+        return "No Data"
     if low <= value <= high:
         if (value - low) < 0.05 * (high - low) or (high - value) < 0.05 * (high - low):
-            return "Sınırda"
-        return "Uygun"
-    return "Uygun Değil"
+            return "Borderline"
+        return "Compliant"
+    return "Non-Compliant"
 
 def create_results(df, column_name, input_values):
     results = []
     for _, row in df.iterrows():
-        param = row["Parametre"]
+        param = row["Parameter"]
         user_val = input_values.get(param)
         limit_range = parse_range(row[column_name])
-        durum = judge(user_val, limit_range)
-        results.append({"Parametre": param, "Değer": user_val, "Durum": durum})
+        status = judge(user_val, limit_range)
+        results.append({"Parameter": param, "Value": user_val, "Status": status})
     return pd.DataFrame(results)
 
 def color_code(val):
-    if val == "Uygun":
+    if val == "Compliant":
         return "background-color: #d4edda"
-    elif val == "Sınırda":
+    elif val == "Borderline":
         return "background-color: #fff3cd"
-    elif val == "Uygun Değil":
+    elif val == "Non-Compliant":
         return "background-color: #f8d7da"
     else:
         return ""
@@ -104,7 +103,7 @@ def color_code(val):
 def generate_pdf(tse_df, ec_df, who_df, ai_df=None):
     buf = BytesIO()
     with PdfPages(buf) as pdf:
-        for title, df in [("TSE Sonuçları", tse_df), ("EC Sonuçları", ec_df), ("WHO Sonuçları", who_df)] + ([("AI Tahminleri", ai_df)] if ai_df is not None else []):
+        for title, df in [("TSE Results", tse_df), ("EC Results", ec_df), ("WHO Results", who_df)] + ([("AI Predictions", ai_df)] if ai_df is not None else []):
             fig, ax = plt.subplots(figsize=(12, 9))  
             ax.axis('off')
 
@@ -115,14 +114,14 @@ def generate_pdf(tse_df, ec_df, who_df, ai_df=None):
             except:
                 pass
 
-            fig.text(0.5, 0.95, "💧 İÇME SUYU KALİTE RAPORU", fontsize=20, ha="center", weight='bold')
+            fig.text(0.5, 0.95, "💧 DRINKING WATER QUALITY REPORT", fontsize=20, ha="center", weight='bold')
             fig.text(0.5, 0.91, title, fontsize=16, ha="center", weight='bold')
 
             table = ax.table(cellText=df.values,
                              colLabels=df.columns,
                              cellLoc='center',
                              loc='center',
-                             colWidths=[0.35, 0.2, 0.25] if title != "AI Tahminleri" else [0.35, 0.2, 0.2, 0.25])
+                             colWidths=[0.35, 0.2, 0.25] if title != "AI Predictions" else [0.35, 0.2, 0.2, 0.25])
 
             table.auto_set_font_size(False)
             table.set_fontsize(11)
@@ -134,12 +133,12 @@ def generate_pdf(tse_df, ec_df, who_df, ai_df=None):
                     cell.set_text_props(weight='bold')
                     cell.set_facecolor("#f2f2f2")
                 else:
-                    durum = df.iloc[key[0]-1, -1]
-                    if durum == "Uygun":
+                    status = df.iloc[key[0]-1, -1]
+                    if status == "Compliant":
                         cell.set_facecolor("#d4edda")
-                    elif durum == "Sınırda":
+                    elif status == "Borderline":
                         cell.set_facecolor("#fff3cd")
-                    elif durum == "Uygun Değil":
+                    elif status == "Non-Compliant":
                         cell.set_facecolor("#f8d7da")
 
             pdf.savefig(fig, bbox_inches='tight')
@@ -151,34 +150,34 @@ def generate_pdf(tse_df, ec_df, who_df, ai_df=None):
 def generate_ai_comment(tse_df):
     try:
         if tse_df.empty:
-            return "TSE verileri boş. Analiz yapılamadı."
-        non_compliant = len(tse_df[tse_df["Durum"] == "Uygun Değil"])
-        borderline = len(tse_df[tse_df["Durum"] == "Sınırda"])
+            return "TSE data is empty. Analysis could not be performed."
+        non_compliant = len(tse_df[tse_df["Status"] == "Non-Compliant"])
+        borderline = len(tse_df[tse_df["Status"] == "Borderline"])
         if non_compliant > 0:
-            return f"Su kalitesi TSE standartlarına göre {non_compliant} parametrede uygun değil. Derhal önlem alınması önerilir."
+            return f"Water quality is non-compliant with TSE standards in {non_compliant} parameters. Immediate action is recommended."
         elif borderline > 0:
-            return f"Su kalitesi genel olarak uygun, ancak {borderline} parametrede sınırda değerler tespit edildi. Dikkatli izleme önerilir."
+            return f"Water quality is generally compliant, but {borderline} parameters are borderline. Careful monitoring is recommended."
         else:
-            return "Su kalitesi TSE standartlarına göre tamamen uygun. Herhangi bir sorun tespit edilmedi."
+            return "Water quality is fully compliant with TSE standards. No issues detected."
     except Exception as e:
-        return f"AI yorumu oluşturulurken hata: {str(e)}"
+        return f"Error generating AI comment: {str(e)}"
 
 def random_forest_prediction(input_values, df_limits):
     if RandomForestRegressor is None:
-        return pd.DataFrame(), 0.0, "Random Forest modeli yüklü değil: scikit-learn eksik."
+        return pd.DataFrame(), 0.0, "Random Forest model not loaded: scikit-learn missing."
 
     try:
         # Log parameters and ranges
-        logger.debug(f"Parameters: {df_limits['Parametre'].tolist()}")
+        logger.debug(f"Parameters: {df_limits['Parameter'].tolist()}")
         for _, row in df_limits.iterrows():
-            logger.debug(f"Param: {row['Parametre']}, TSE Range: {row['TSE']}, Parsed: {parse_range(row['TSE'])}")
+            logger.debug(f"Param: {row['Parameter']}, TSE Range: {row['TSE']}, Parsed: {parse_range(row['TSE'])}")
 
         # Generate synthetic training data
         np.random.seed(42)
         n_samples = 100
         X_train = []
         y_train = []
-        params = df_limits["Parametre"]
+        params = df_limits["Parameter"]
         
         for i in range(n_samples):
             sample = []
@@ -222,17 +221,17 @@ def random_forest_prediction(input_values, df_limits):
         # Results DataFrame
         results = []
         for param, val in zip(params, input_vector):
-            tse_range = df_limits[df_limits["Parametre"] == param]["TSE"].iloc[0]
+            tse_range = df_limits[df_limits["Parameter"] == param]["TSE"].iloc[0]
             results.append({
-                "Parametre": param,
-                "Değer": val,
-                "Tahmini Değer": val,  # Placeholder
-                "Durum": judge(val, parse_range(tse_range))
+                "Parameter": param,
+                "Value": val,
+                "Predicted Value": val,  # Placeholder
+                "Status": judge(val, parse_range(tse_range))
             })
         return pd.DataFrame(results), prediction, None
     except Exception as e:
         logger.error(f"Random Forest error: {str(e)}")
-        return pd.DataFrame(), 0.0, f"Random Forest tahmini sırasında hata: {str(e)}"
+        return pd.DataFrame(), 0.0, f"Error during Random Forest prediction: {str(e)}"
 
 def create_comparison_chart(df_limits, input_values):
     try:
@@ -241,7 +240,7 @@ def create_comparison_chart(df_limits, input_values):
         tse_limits = []
         user_values = []
         for _, row in df_limits.iloc[:5].iterrows():
-            param = row["Parametre"]
+            param = row["Parameter"]
             tse_range = parse_range(row["TSE"])
             if tse_range[1] is not None:
                 params.append(param)
@@ -254,12 +253,12 @@ def create_comparison_chart(df_limits, input_values):
         fig, ax = plt.subplots(figsize=(10, 6))
         bar_width = 0.35
         x = range(len(params))
-        ax.bar([i - bar_width/2 for i in x], user_values, bar_width, label="Kullanıcı Değerleri", color="#36A2EB")
-        ax.bar([i + bar_width/2 for i in x], tse_limits, bar_width, label="TSE Üst Sınır", color="#FF6384")
+        ax.bar([i - bar_width/2 for i in x], user_values, bar_width, label="User Values", color="#36A2EB")
+        ax.bar([i + bar_width/2 for i in x], tse_limits, bar_width, label="TSE Upper Limit", color="#FF6384")
         
-        ax.set_xlabel("Parametreler")
-        ax.set_ylabel("Değerler")
-        ax.set_title("Kullanıcı Değerleri vs TSE Üst Sınırları")
+        ax.set_xlabel("Parameters")
+        ax.set_ylabel("Values")
+        ax.set_title("User Values vs TSE Upper Limits")
         ax.set_xticks(x)
         ax.set_xticklabels(params, rotation=45)
         ax.legend()
@@ -271,17 +270,17 @@ def create_comparison_chart(df_limits, input_values):
         buf.seek(0)
         return buf, None
     except Exception as e:
-        return None, f"Grafik oluşturulurken hata: {str(e)}"
+        return None, f"Error generating chart: {str(e)}"
 
-st.title("💧 İçme Suyu Kalite Testi")
-st.caption("📌 Lütfen sadece sayısal değer giriniz. Boş bırakabilirsiniz.")
+st.title("💧 Drinking Water Quality Test")
+st.caption("📌 Please enter only numerical values. You can leave fields blank.")
 
 df_limits = fetch_limits()
 input_values = {}
 
 cols = st.columns(2)
 for idx, row in df_limits.iterrows():
-    param = row["Parametre"]
+    param = row["Parameter"]
     with cols[idx % 2]:
         input_values[param] = st.number_input(param, format="%.4f", key=param)
 
@@ -292,41 +291,40 @@ if st.button("Generate Report"):
     
     # AI Analysis
     ai_df, quality_score, rf_error = random_forest_prediction(input_values, df_limits)
-    ai_comment = generate_ai_comment(df_tse) if not rf_error else "AI yorumu oluşturulamadı."
+    ai_comment = generate_ai_comment(df_tse) if not rf_error else "AI comment could not be generated."
     chart_buf, chart_error = create_comparison_chart(df_limits, input_values)
 
-    tabs = st.tabs(["📘 TSE", "📗 EC", "📕 WO", "🤖 AI"])
+    tabs = st.tabs(["📘 TSE", "📗 EC", "📕 WHO", "🤖 AI"])
     with tabs[0]:
         st.subheader("TSE Results")
-        st.dataframe(df_tse.style.map(color_code, subset=["Durum"]))
+        st.dataframe(df_tse.style.map(color_code, subset=["Status"]))
     with tabs[1]:
         st.subheader("EC Results")
-        st.dataframe(df_ec.style.map(color_code, subset=["Durum"]))
+        st.dataframe(df_ec.style.map(color_code, subset=["Status"]))
     with tabs[2]:
         st.subheader("WHO Results")
-        st.dataframe(df_who.style.map(color_code, subset=["Durum"]))
+        st.dataframe(df_who.style.map(color_code, subset=["Status"]))
     with tabs[3]:
         st.subheader("AI Analysis")
         # Display input values for debugging
-        st.write("**Girilen Değerler:**")
+        st.write("**Entered Values:**")
         input_summary = {k: v for k, v in input_values.items() if v != 0}
-        st.write(input_summary if input_summary else "Hiçbir değer girilmedi.")
+        st.write(input_summary if input_summary else "No values entered.")
         if rf_error:
             st.error(rf_error)
         else:
-            st.write(f"**Su Kalite Skoru (Random Forest Tahmini):** {quality_score:.2f}/100")
-            st.write(f"**AI Yorumu:** {ai_comment}")
-            st.dataframe(ai_df.style.map(color_code, subset=["Durum"]))
+            st.write(f"**Water Quality Score (Random Forest Prediction):** {quality_score:.2f}/100")
+            st.write(f"**AI Comment:** {ai_comment}")
+            st.dataframe(ai_df.style.map(color_code, subset=["Status"]))
         if chart_error:
             st.error(chart_error)
         elif chart_buf:
-            st.image(chart_buf, caption="Kullanıcı Değerleri vs TSE Üst Sınırları (İlk 5 Parametre)")
+            st.image(chart_buf, caption="User Values vs TSE Upper Limits (First 5 Parameters)")
 
     st.markdown("---")
-    st.success("Rapor hazır! PDF formatında indirebilirsin.")
+    st.success("Report is ready! You can download it in PDF format.")
 
     pdf_file = generate_pdf(df_tse, df_ec, df_who, ai_df if not rf_error else None)
-    st.download_button("📥 PDF Raporu İndir", data=pdf_file,
-                       file_name="su_kalite_raporu.pdf",
+    st.download_button("📥 Download PDF Report", data=pdf_file,
+                       file_name="water_quality_report.pdf",
                        mime="application/pdf")
-```
