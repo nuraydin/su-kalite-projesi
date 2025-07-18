@@ -1,3 +1,4 @@
+# -*- coding: utf-8 -*-
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
@@ -25,7 +26,7 @@ fm._load_fontmanager(try_read_cache=True)
 
 st.set_page_config(page_title="Water Quality Test", layout="wide")
 
-CSV_FILE = "water_quality_standards.txt"
+CSV_FILE = "su_kalite_standartlari.txt"
 LOGO_PATH = "mar_logo.png"
 
 @st.cache_data
@@ -34,7 +35,7 @@ def fetch_limits():
         st.error(f"{CSV_FILE} file not found!")
         return pd.DataFrame()
     try:
-        df = pd.read_csv(CSV_FILE)
+        df = pd.read_csv(CSV_FILE, encoding='utf-8')
         df.rename(columns={df.columns[0]: "Parameter",
                            df.columns[1]: "TSE",
                            df.columns[2]: "EC",
@@ -154,7 +155,7 @@ def generate_ai_comment(tse_df):
         non_compliant = len(tse_df[tse_df["Status"] == "Non-Compliant"])
         borderline = len(tse_df[tse_df["Status"] == "Borderline"])
         if non_compliant > 0:
-            return f"Water quality is non-compliant with TSE standards in {non_compliant} parameters. Immediate action is recommended."
+            return f"Water quality is non-compliant with TSE standards for {non_compliant} parameters. Immediate action is recommended."
         elif borderline > 0:
             return f"Water quality is generally compliant, but {borderline} parameters are borderline. Careful monitoring is recommended."
         else:
@@ -164,7 +165,7 @@ def generate_ai_comment(tse_df):
 
 def random_forest_prediction(input_values, df_limits):
     if RandomForestRegressor is None:
-        return pd.DataFrame(), 0.0, "Random Forest model not loaded: scikit-learn missing."
+        return pd.DataFrame(), 0.0, "Random Forest model not loaded: scikit-learn is missing."
 
     try:
         # Log parameters and ranges
@@ -291,7 +292,7 @@ if st.button("Generate Report"):
     
     # AI Analysis
     ai_df, quality_score, rf_error = random_forest_prediction(input_values, df_limits)
-    ai_comment = generate_ai_comment(df_tse) if not rf_error else "AI comment could not be generated."
+    ai_comment = generate_ai_comment(df_tse) if not rf_error else "Could not generate AI comment."
     chart_buf, chart_error = create_comparison_chart(df_limits, input_values)
 
     tabs = st.tabs(["📘 TSE", "📗 EC", "📕 WHO", "🤖 AI"])
